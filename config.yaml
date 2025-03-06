@@ -1,0 +1,9 @@
+log:
+  level: "trace"
+  gelf:
+    address: "127.0.0.1:12201"
+  file:
+    filename: "digger.log"
+    maxsize: 1 # megabytes
+    maxbackups: 3 # number of backups
+    maxage: 30 # days

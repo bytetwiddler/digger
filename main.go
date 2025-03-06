@@ -2,32 +2,24 @@ package main
 
 import (
 	"encoding/csv"
+	"errors"
 	"flag"
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"strconv"
 
-	"github.com/Graylog2/go-gelf/gelf"
+	"github.com/bytetwiddler/digger/config"
+	"github.com/bytetwiddler/digger/logging"
 	"github.com/gofrs/flock"
-	"gopkg.in/yaml.v2"
+	"github.com/sirupsen/logrus"
 )
 
 var (
-	version string
-	build   string
-	date    string
+	version string //nolint:gochecknoglobals // These are set by the linker
+	build   string //nolint:gochecknoglobals // These are set by the linker
+	date    string //nolint:gochecknoglobals // These are set by the linker
 )
-
-type Config struct {
-	Log struct {
-		Level string `yaml:"level"`
-		Gelf  struct {
-			Address string `yaml:"address"`
-		} `yaml:"gelf"`
-	} `yaml:"log"`
-}
 
 type Site struct {
 	Hostname   string `csv:"hostname"`
@@ -38,6 +30,10 @@ type Site struct {
 
 type Sites []Site
 
+// Custom error for no IP addresses found
+var ErrNoIPsFound = errors.New("no IP addresses found for the domain")
+
+// writeToFile writes the sites to a CSV file.
 func (s *Sites) writeToFile(filename string) error {
 	file, err := os.Create(filename)
 	if err != nil {
@@ -65,6 +61,7 @@ func (s *Sites) writeToFile(filename string) error {
 	return nil
 }
 
+// readFromFile reads the sites from a CSV file and populates the Sites slice.
 func (s *Sites) readFromFile(filename string) error {
 	file, err := os.Open(filename)
 	if err != nil {
@@ -95,22 +92,37 @@ func (s *Sites) readFromFile(filename string) error {
 	return nil
 }
 
+// dig performs a DNS lookup on the hostnames in the sites slice and updates the IP field if the IP has changed.
 func dig(sites *Sites) (bool, error) {
 	changed := false
 	for i := range *sites {
 		ip, err := net.LookupIP((*sites)[i].Hostname)
 		if err != nil {
-			log.Printf("Error: %v", err)
-			return false, err
+			logrus.Errorf("Error resolving %s: %v", (*sites)[i].Hostname, err)
+			continue
 		}
-		if (*sites)[i].IP != ip[0].String() {
-			fmt.Printf("%v IP HAS changed: %v -> %v\n", (*sites)[i].Hostname, (*sites)[i].IP, ip[0].String())
-			log.Printf("%v IP HAS changed: %v -> %v", (*sites)[i].Hostname, (*sites)[i].IP, ip[0].String())
+		numberOfIPs := len(ip)
+		if numberOfIPs == 0 {
+			logrus.Errorf("No IP addresses found for %s", (*sites)[i].Hostname)
+			continue
+		}
+		matchFound := false
+		for _, addr := range ip {
+			if (*sites)[i].IP == addr.String() {
+				matchFound = true
+				break
+			}
+		}
+		if !matchFound {
+			fmt.Fprintf(os.Stderr, "%v IP HAS changed: %v -> %v\n", (*sites)[i].Hostname, (*sites)[i].IP, ip[0].String())
+			logrus.Infof("%v IP HAS changed: %v -> %v", (*sites)[i].Hostname, (*sites)[i].IP, ip[0].String())
 			(*sites)[i].IP = ip[0].String()
 			changed = true
 		} else {
-			fmt.Printf("%v IP has NOT changed: %v <-> %v\n", (*sites)[i].Hostname, (*sites)[i].IP, ip[0].String())
-			log.Printf("%v IP has NOT changed: %v <-> %v", (*sites)[i].Hostname, (*sites)[i].IP, ip[0].String())
+			fmt.Fprintf(os.Stderr, "%v Number of IP's returned: %v IP was in the set: %v <-> %v\n",
+				(*sites)[i].Hostname, numberOfIPs, (*sites)[i].IP, ip[0].String())
+			logrus.Infof("%v Number of IP's returned: %v IP has NOT changed: %v <-> %v",
+				(*sites)[i].Hostname, numberOfIPs, (*sites)[i].IP, ip[0].String())
 		}
 	}
 	return changed, nil
@@ -121,57 +133,55 @@ func main() {
 	flag.Parse()
 
 	if *versionFlag {
-		fmt.Printf("Version: %s, Build: %s, Date: %s\n", version, build, date)
+		fmt.Fprintf(os.Stderr, "Version: %s, Build: %s, Date: %s\n", version, build, date)
 		return
 	}
 
 	// Read configuration
-	configFile, err := os.Open("config.yaml")
+	config, err := config.LoadConfig("config.yaml")
 	if err != nil {
-		log.Fatalf("Error opening config file: %v", err)
-	}
-	defer configFile.Close()
-
-	var config Config
-	decoder := yaml.NewDecoder(configFile)
-	err = decoder.Decode(&config)
-	if err != nil {
-		log.Fatalf("Error decoding config file: %v", err)
+		logrus.Fatalf("Error opening config file: %v", err)
 	}
 
-	// Set up GELF logger
-	gelfWriter, err := gelf.NewWriter(config.Log.Gelf.Address)
+	// Setup logging
+	logChannel, err := logging.SetupLogging(config)
 	if err != nil {
-		log.Fatalf("Error setting up GELF logger: %v", err)
+		logrus.Fatalf("Error setting up logging: %v", err)
 	}
-	log.SetOutput(gelfWriter)
+
+	// Debug: Log a test message
+	logrus.Println("Test log message")
 
 	// Lock the sites.csv file
 	fileLock := flock.New("sites.csv.lock")
 	locked, err := fileLock.TryLock()
 	if err != nil {
-		log.Fatalf("Error locking sites file: %v", err)
+		logrus.Fatalf("Error locking sites file: %v", err)
 	}
 	if !locked {
-		log.Fatalf("Could not acquire lock on sites file")
+		logrus.Fatalf("Could not acquire lock on sites file")
 	}
 	defer fileLock.Unlock()
 
-	var sites Sites
+	sites := Sites{}
+
 	err = sites.readFromFile("sites.csv")
 	if err != nil {
-		log.Fatalf("Error reading sites file: %v", err)
+		logrus.Fatalf("Error reading sites file: %v", err)
 	}
 
 	changed, err := dig(&sites)
 	if err != nil {
-		log.Fatalf("Error in dig function: %v", err)
+		logrus.Fatalf("Error in dig function: %v", err)
 	}
 
 	if changed {
 		err = sites.writeToFile("sites.csv")
 		if err != nil {
-			log.Fatalf("Error writing sites file: %v", err)
+			logrus.Fatalf("Error writing sites file: %v", err)
 		}
 	}
+
+	// Close the log channel to stop the goroutine
+	close(logChannel)
 }
