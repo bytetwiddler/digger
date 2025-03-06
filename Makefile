@@ -1,4 +1,4 @@
-.PHONY: build clean
+.PHONY: build clean run tidy
 APP := digger
 APP_VERSION := 0.1.0
 APP_BUILD := $(shell git rev-parse --short HEAD)

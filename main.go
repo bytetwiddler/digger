@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/csv"
+	"flag"
 	"fmt"
 	"log"
 	"net"
@@ -11,6 +12,12 @@ import (
 	"github.com/Graylog2/go-gelf/gelf"
 	"github.com/gofrs/flock"
 	"gopkg.in/yaml.v2"
+)
+
+var (
+	version string
+	build   string
+	date    string
 )
 
 type Config struct {
@@ -110,6 +117,14 @@ func dig(sites *Sites) (bool, error) {
 }
 
 func main() {
+	versionFlag := flag.Bool("version", false, "Print the version and exit")
+	flag.Parse()
+
+	if *versionFlag {
+		fmt.Printf("Version: %s, Build: %s, Date: %s\n", version, build, date)
+		return
+	}
+
 	// Read configuration
 	configFile, err := os.Open("config.yaml")
 	if err != nil {
