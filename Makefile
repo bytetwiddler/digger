@@ -5,7 +5,7 @@ APP_BUILD := $(shell git rev-parse --short HEAD)
 APP_DATE := $(shell date -u '+%Y-%m-%d_%H:%M:%S')
 LDFLAGS := -X main.version=$(APP_VERSION) -X main.build=$(APP_BUILD) -X main.date=$(APP_DATE)
 
-build: clean deps
+build: clean tidy
 	go build -ldflags "$(LDFLAGS)" -o $(APP) main.go
 
 run: build
@@ -14,5 +14,5 @@ run: build
 clean:
 	rm -f $(APP)
 
-deps:
+tidy:
 	go mod tidy

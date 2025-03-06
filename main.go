@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/Graylog2/go-gelf/gelf"
+	"github.com/gofrs/flock"
 	"gopkg.in/yaml.v2"
 )
 
@@ -87,22 +88,25 @@ func (s *Sites) readFromFile(filename string) error {
 	return nil
 }
 
-func dig(sites *Sites) error {
+func dig(sites *Sites) (bool, error) {
+	changed := false
 	for i := range *sites {
 		ip, err := net.LookupIP((*sites)[i].Hostname)
 		if err != nil {
 			log.Printf("Error: %v", err)
-			return err
+			return false, err
 		}
 		if (*sites)[i].IP != ip[0].String() {
-			fmt.Printf("%v IP changed from %v to %v\n", (*sites)[i].Hostname, (*sites)[i].IP, ip[0].String())
-			log.Printf("%v IP changed from %v to %v", (*sites)[i].Hostname, (*sites)[i].IP, ip[0].String())
+			fmt.Printf("%v IP HAS changed: %v -> %v\n", (*sites)[i].Hostname, (*sites)[i].IP, ip[0].String())
+			log.Printf("%v IP HAS changed: %v -> %v", (*sites)[i].Hostname, (*sites)[i].IP, ip[0].String())
 			(*sites)[i].IP = ip[0].String()
+			changed = true
+		} else {
+			fmt.Printf("%v IP has NOT changed: %v <-> %v\n", (*sites)[i].Hostname, (*sites)[i].IP, ip[0].String())
+			log.Printf("%v IP has NOT changed: %v <-> %v", (*sites)[i].Hostname, (*sites)[i].IP, ip[0].String())
 		}
-		fmt.Printf("%v IP has not change %v <-> %v\n", (*sites)[i].Hostname, (*sites)[i].IP, ip[0].String())
-		log.Printf("%v IP has not change %v <-> %v", (*sites)[i].Hostname, (*sites)[i].IP, ip[0].String())
 	}
-	return nil
+	return changed, nil
 }
 
 func main() {
@@ -127,19 +131,32 @@ func main() {
 	}
 	log.SetOutput(gelfWriter)
 
+	// Lock the sites.csv file
+	fileLock := flock.New("sites.csv.lock")
+	locked, err := fileLock.TryLock()
+	if err != nil {
+		log.Fatalf("Error locking sites file: %v", err)
+	}
+	if !locked {
+		log.Fatalf("Could not acquire lock on sites file")
+	}
+	defer fileLock.Unlock()
+
 	var sites Sites
 	err = sites.readFromFile("sites.csv")
 	if err != nil {
 		log.Fatalf("Error reading sites file: %v", err)
 	}
 
-	err = dig(&sites)
+	changed, err := dig(&sites)
 	if err != nil {
 		log.Fatalf("Error in dig function: %v", err)
 	}
 
-	err = sites.writeToFile("sites.csv")
-	if err != nil {
-		log.Fatalf("Error writing sites file: %v", err)
+	if changed {
+		err = sites.writeToFile("sites.csv")
+		if err != nil {
+			log.Fatalf("Error writing sites file: %v", err)
+		}
 	}
 }

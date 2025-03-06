@@ -1,4 +1,4 @@
-"hostname",port,"entity name"
-"sftp01.neogove.com",22,"neo gov"
-"sftp.ashn.com",22,"Active and Fit"
-"sftp.modahealth.com",22,"Moda Health Insurance"
+Hostname,Port,EntityName,IP
+sftp01.neogov.com,22,neo gov,162.246.160.20
+sftp.ashn.com,22,Active and Fit,12.22.204.10
+sftp.modahealth.com,22,Moda Health Insurance,199.4.191.137
