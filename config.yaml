@@ -1,7 +1,7 @@
 log:
   level: "trace"
   gelf:
-    address: "127.0.0.1:12201"
+    address: "192.168.1.4:12201"
   file:
     filename: "digger.log"
     maxsize: 1 # megabytes

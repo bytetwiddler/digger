@@ -1,18 +1,35 @@
-.PHONY: build clean run tidy
-APP := digger
-APP_VERSION := 0.1.0
-APP_BUILD := $(shell git rev-parse --short HEAD)
-APP_DATE := $(shell date -u '+%Y-%m-%d_%H:%M:%S')
-LDFLAGS := -X main.version=$(APP_VERSION) -X main.build=$(APP_BUILD) -X main.date=$(APP_DATE)
+.PHONY: all build test clean run build-windows build-linux build-darwin build-all
 
-build: clean tidy
-	go build -ldflags "$(LDFLAGS)" -o $(APP) *.go
+VERSION := $(shell git describe --tags --always --dirty)
+BUILD := $(shell git rev-parse --short HEAD)
+DATE := $(shell date +%Y-%m-%d)
+LDARGS := -X main.version=$(VERSION) -X main.build=$(BUILD) -X main.date=$(DATE)
+OUTPUT_DIR := build
 
-run: build
-	./$(APP)
+# Create the output directory if it doesn't exist
+$(shell mkdir -p $(OUTPUT_DIR))
+
+all: build
+
+build:
+	go build -ldflags "$(LDARGS)" -o digger -v ./cmd/digger
+
+build-windows:
+	GOOS=windows GOARCH=amd64 go build -ldflags "$(LDARGS)" -o $(OUTPUT_DIR)/digger-windows-amd64.exe -v ./cmd/digger
+
+build-linux:
+	GOOS=linux GOARCH=amd64 go build -ldflags "$(LDARGS)" -o $(OUTPUT_DIR)/digger-linux-amd64 -v ./cmd/digger
+
+build-darwin:
+	GOOS=darwin GOARCH=arm64 go build -ldflags "$(LDARGS)" -o $(OUTPUT_DIR)/digger-darwin-arm64 -v ./cmd/digger
+
+build-all: build-windows build-linux build-darwin
+
+test:
+	go test -v ./...
 
 clean:
-	rm -f $(APP)
+	rm -f digger $(OUTPUT_DIR)/digger-windows-amd64.exe $(OUTPUT_DIR)/digger-linux-amd64 $(OUTPUT_DIR)/digger-darwin-arm64
 
-tidy:
-	go mod tidy
+run: build
+	./digger
