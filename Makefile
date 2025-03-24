@@ -29,7 +29,7 @@ test:
 	go test -v ./... -cover
 
 clean:
-	rm -f digger $(OUTPUT_DIR)/digger-windows-amd64.exe $(OUTPUT_DIR)/digger-linux-amd64 $(OUTPUT_DIR)/digger-darwin-arm64
+	rm -f digger $(OUTPUT_DIR)/digger-windows-amd64.exe $(OUTPUT_DIR)/digger-linux-amd64 $(OUTPUT_DIR)/digger-darwin-arm64 digger.log
 
 run: build
 	./digger
