@@ -1,0 +1,8 @@
+time="2025-03-11T10:26:25-07:00" level=info msg="Multiple IP addresses found" hostname=example.com match_found=false number_of_ips=12
+time="2025-03-11T10:26:25-07:00" level=info msg="IP has changed" hostname=example.com new_ip=96.7.128.198 old_ip=1.2.3.4
+time="2025-03-11T10:26:42-07:00" level=info msg="Multiple IP addresses found" hostname=example.com match_found=false number_of_ips=12
+time="2025-03-11T10:26:42-07:00" level=info msg="IP has changed" hostname=example.com new_ip=23.192.228.80 old_ip=1.2.3.4
+time="2025-03-11T10:27:11-07:00" level=info msg="Multiple IP addresses found" hostname=example.com match_found=false number_of_ips=12
+time="2025-03-11T10:27:11-07:00" level=info msg="IP has changed" hostname=example.com new_ip=23.192.228.84 old_ip=1.2.3.4
+time="2025-03-11T10:27:59-07:00" level=info msg="Multiple IP addresses found" hostname=example.com match_found=false number_of_ips=12
+time="2025-03-11T10:27:59-07:00" level=info msg="IP has changed" hostname=example.com new_ip=23.215.0.136 old_ip=1.2.3.4

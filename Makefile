@@ -26,7 +26,7 @@ build-darwin:
 build-all: build-windows build-linux build-darwin
 
 test:
-	go test -v ./...
+	go test -v ./... -cover
 
 clean:
 	rm -f digger $(OUTPUT_DIR)/digger-windows-amd64.exe $(OUTPUT_DIR)/digger-linux-amd64 $(OUTPUT_DIR)/digger-darwin-arm64
