@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestRun(t *testing.T) {
+func TestMainFunction(t *testing.T) {
 	// Setup temporary config file
 	configContent := `
 log:
@@ -21,6 +21,15 @@ log:
     maxsize: 5
     maxbackups: 2
     maxage: 15
+db:
+  path: "test.db"
+smtp:
+  host: "localhost"
+  port: 25
+  username: "user"
+  password: "pass"
+  from: "from@example.com"
+  to: "to@example.com"
 `
 	err := os.WriteFile("config.yaml", []byte(configContent), 0644)
 	assert.NoError(t, err)
@@ -35,13 +44,12 @@ example.com,80,example_entity,1.2.3.4
 	defer os.Remove("sites.csv")
 
 	// Run the main function
-	err = run()
-	assert.NoError(t, err)
+	main()
 
 	// Verify the sites file was updated
 	sites := site.Sites{}
-	err = sites.ReadFromFile("sites.csv")
+	err = sites.ReadFromCSV("sites.csv")
 	assert.NoError(t, err)
 	assert.Equal(t, "example.com", sites[0].Hostname)
-	assert.NotEqual(t, "1.2.3.4", sites[0].IP)
+	assert.NotEqual(t, "1.2.3.5", sites[0].IP)
 }

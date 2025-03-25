@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -14,13 +15,14 @@ import (
 )
 
 type Site struct {
-	Name       string
-	Port       string
+	Hostname   string
+	Port       int
 	EntityName string
 	IP         string
 	OldIP      string
 	NewIP      string
 	Changed    bool
+	ChangeTime time.Time
 }
 
 type Sites []Site
@@ -28,20 +30,23 @@ type Sites []Site
 func (s *Sites) ReadFromCSV(filePath string) error {
 	file, err := os.Open(filePath)
 	if err != nil {
-		return fmt.Errorf("cannot read from csv file: %w", err)
+		return fmt.Errorf("failed to open csv file: %w", err)
 	}
 	defer file.Close()
 
 	reader := csv.NewReader(file)
 	records, err := reader.ReadAll()
-
 	if err != nil {
 		return fmt.Errorf("failed to read from csv file: %w", err)
 	}
 
 	// Skip the header row
 	for _, record := range records[1:] {
-		*s = append(*s, Site{Name: record[0], Port: record[1], EntityName: record[2], IP: record[3]})
+		port, err := strconv.Atoi(record[1])
+		if err != nil {
+			return fmt.Errorf("invalid port value: %w", err)
+		}
+		*s = append(*s, Site{Hostname: record[0], Port: port, EntityName: record[2], IP: record[3]})
 	}
 
 	return nil
@@ -65,7 +70,7 @@ func (s *Sites) WriteToCSV(filePath string) error {
 
 	// Write the site records
 	for _, site := range *s {
-		err = writer.Write([]string{site.Name, site.Port, site.EntityName, site.IP, "", "", ""})
+		err = writer.Write([]string{site.Hostname, strconv.Itoa(site.Port), site.EntityName, site.IP, "", "", ""})
 		if err != nil {
 			return fmt.Errorf("failed to write csv site records: %w", err)
 		}
@@ -84,15 +89,12 @@ func (s *Sites) ReadFromDB(db *bbolt.DB) error {
 		return b.ForEach(func(k, v []byte) error {
 			var site Site
 			err := json.Unmarshal(v, &site)
-
 			if err != nil {
 				logrus.Errorf("Failed to unmarshal site data for key %s: %v", k, err)
-
 				return nil // Skip invalid entries
 			}
 
 			*s = append(*s, site)
-
 			return nil
 		})
 	})
@@ -111,7 +113,7 @@ func (s *Sites) WriteToDB(db *bbolt.DB) error {
 				return fmt.Errorf("failed to marshal site json: %w", err)
 			}
 
-			err = b.Put([]byte(site.Name), data)
+			err = b.Put([]byte(site.Hostname), data)
 			if err != nil {
 				return fmt.Errorf("failed to put site.Name: %w", err)
 			}
@@ -123,19 +125,16 @@ func (s *Sites) WriteToDB(db *bbolt.DB) error {
 
 func (s *Sites) UpdateIPs(db *bbolt.DB) error {
 	for i, site := range *s {
-		ips, err := net.LookupIP(site.Name)
+		ips, err := net.LookupIP(site.Hostname)
 		if err != nil {
-			logrus.Errorf("Failed to lookup IP for %s: %v", site.Name, err)
-
+			logrus.Errorf("Failed to lookup IP for %s: %v", site.Hostname, err)
 			continue
 		}
 
 		ipChanged := true
-
 		for _, ip := range ips {
 			if ip.String() == site.IP {
 				ipChanged = false
-
 				break
 			}
 		}
@@ -145,7 +144,7 @@ func (s *Sites) UpdateIPs(db *bbolt.DB) error {
 			(*s)[i].NewIP = ips[0].String()
 			(*s)[i].IP = ips[0].String()
 			(*s)[i].Changed = true
-			logrus.Infof("IP address for %s changed from %s to %s", site.Name, (*s)[i].OldIP, (*s)[i].NewIP)
+			logrus.Infof("IP address for %s changed from %s to %s", site.Hostname, (*s)[i].OldIP, (*s)[i].NewIP)
 
 			// Persist the change in the database
 			err = db.Update(func(tx *bbolt.Tx) error {
@@ -159,7 +158,7 @@ func (s *Sites) UpdateIPs(db *bbolt.DB) error {
 					return fmt.Errorf("failed to marshal json: %w", err)
 				}
 
-				err = b.Put([]byte(site.Name), data)
+				err = b.Put([]byte(site.Hostname), data)
 				if err != nil {
 					return fmt.Errorf("failed to put site.Name: %w", err)
 				}
@@ -173,12 +172,11 @@ func (s *Sites) UpdateIPs(db *bbolt.DB) error {
 					}
 				}
 
-				changeKey := fmt.Sprintf("%s-%s", site.Name, time.Now().Format(time.RFC3339))
-
+				changeKey := fmt.Sprintf("%s-%s", site.Hostname, time.Now().Format(time.RFC3339))
 				return cb.Put([]byte(changeKey), data)
 			})
 			if err != nil {
-				logrus.Errorf("Failed to persist change for %s: %v", site.Name, err)
+				logrus.Errorf("Failed to persist change for %s: %v", site.Hostname, err)
 			}
 		}
 	}
@@ -196,15 +194,12 @@ func (s *Sites) ReportChanges(db *bbolt.DB) error {
 		return cb.ForEach(func(k, v []byte) error {
 			var site Site
 			err := json.Unmarshal(v, &site)
-
 			if err != nil {
 				logrus.Errorf("Failed to unmarshal site data for key %s: %v", k, err)
-
 				return nil // Skip invalid entries
 			}
 
-			fmt.Printf("Site: %s, Old IP: %s, New IP: %s, Timestamp: %s\n", site.Name, site.OldIP, site.NewIP, k)
-
+			fmt.Printf("Site: %s, Old IP: %s, New IP: %s, Timestamp: %s\n", site.Hostname, site.OldIP, site.NewIP, k)
 			return nil
 		})
 	})
@@ -219,7 +214,6 @@ func (s *Sites) CountRecords(db *bbolt.DB) (int, error) {
 		}
 		return b.ForEach(func(k, v []byte) error {
 			count++
-
 			return nil
 		})
 	})
