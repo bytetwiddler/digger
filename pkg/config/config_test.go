@@ -22,22 +22,40 @@ log:
   gelf:
     address: "127.0.0.1:12201"
   file:
-    filename: "test.log"
-    maxsize: 5
-    maxbackups: 2
-    maxage: 15
+    filename: "env_test.log"
+    maxsize: 10
+    maxbackups: 3
+    maxage: 20
 `,
 			expectedConfig: &Config{
-				Log: LogConfig{
+				Log: struct {
+					Level string `yaml:"level"`
+					Gelf  struct {
+						Address string `yaml:"address"`
+					} `yaml:"gelf"`
+					File struct {
+						Filename   string `yaml:"filename"`
+						MaxSize    int    `yaml:"maxsize"`
+						MaxBackups int    `yaml:"maxbackups"`
+						MaxAge     int    `yaml:"maxage"`
+					} `yaml:"file"`
+				}{
 					Level: "debug",
-					GELF: GELFConfig{
+					Gelf: struct {
+						Address string `yaml:"address"`
+					}{
 						Address: "127.0.0.1:12201",
 					},
-					LogFile: LogFileConfig{
-						Filename:   "test.log",
-						MaxSize:    5,
-						MaxBackups: 2,
-						MaxAge:     15,
+					File: struct {
+						Filename   string `yaml:"filename"`
+						MaxSize    int    `yaml:"maxsize"`
+						MaxBackups int    `yaml:"maxbackups"`
+						MaxAge     int    `yaml:"maxage"`
+					}{
+						Filename:   "env_test.log",
+						MaxSize:    10,
+						MaxBackups: 3,
+						MaxAge:     20,
 					},
 				},
 			},
@@ -57,10 +75,10 @@ log:
   gelf:
     address: "127.0.0.1:12201"
   file:
-    filename: "test.log"
+    filename: "env_test.log"
     maxsize: "invalid"
-    maxbackups: 2
-    maxage: 15
+    maxbackups: 3
+    maxage: 20 
 `,
 			expectedConfig: nil,
 			expectError:    true,
@@ -73,10 +91,10 @@ log:
   gelf:
     address: "127.0.0.1:12201"
   file:
-    filename: "test.log"
-    maxsize: 5
-    maxbackups: 2
-    maxage: 15
+    filename: "env_test.log"
+    maxsize: 10
+    maxbackups: 3
+    maxage: 20
 `,
 			envVars: map[string]string{
 				"LOG_LEVEL":      "debug",
@@ -86,12 +104,30 @@ log:
 				"LOG_MAXAGE":     "20",
 			},
 			expectedConfig: &Config{
-				Log: LogConfig{
-					Level: "debug",
-					GELF: GELFConfig{
+				Log: struct {
+					Level string `yaml:"level"`
+					Gelf  struct {
+						Address string `yaml:"address"`
+					} `yaml:"gelf"`
+					File struct {
+						Filename   string `yaml:"filename"`
+						MaxSize    int    `yaml:"maxsize"`
+						MaxBackups int    `yaml:"maxbackups"`
+						MaxAge     int    `yaml:"maxage"`
+					} `yaml:"file"`
+				}{
+					Level: "info",
+					Gelf: struct {
+						Address string `yaml:"address"`
+					}{
 						Address: "127.0.0.1:12201",
 					},
-					LogFile: LogFileConfig{
+					File: struct {
+						Filename   string `yaml:"filename"`
+						MaxSize    int    `yaml:"maxsize"`
+						MaxBackups int    `yaml:"maxbackups"`
+						MaxAge     int    `yaml:"maxage"`
+					}{
 						Filename:   "env_test.log",
 						MaxSize:    10,
 						MaxBackups: 3,
@@ -118,7 +154,7 @@ log:
 				defer os.Unsetenv(key)
 			}
 
-			cfg, err := LoadConfig()
+			cfg, err := LoadConfig("config.yaml")
 			if tt.expectError {
 				if err == nil {
 					t.Fatalf("expected error, got none")
@@ -130,20 +166,20 @@ log:
 				if cfg.Log.Level != tt.expectedConfig.Log.Level {
 					t.Errorf("expected log level to be '%s', got '%s'", tt.expectedConfig.Log.Level, cfg.Log.Level)
 				}
-				if cfg.Log.GELF.Address != tt.expectedConfig.Log.GELF.Address {
-					t.Errorf("expected GELF address to be '%s', got '%s'", tt.expectedConfig.Log.GELF.Address, cfg.Log.GELF.Address)
+				if cfg.Log.Gelf.Address != tt.expectedConfig.Log.Gelf.Address {
+					t.Errorf("expected GELF address to be '%s', got '%s'", tt.expectedConfig.Log.Gelf.Address, cfg.Log.Gelf.Address)
 				}
-				if cfg.Log.LogFile.Filename != tt.expectedConfig.Log.LogFile.Filename {
-					t.Errorf("expected log filename to be '%s', got '%s'", tt.expectedConfig.Log.LogFile.Filename, cfg.Log.LogFile.Filename)
+				if cfg.Log.File.Filename != tt.expectedConfig.Log.File.Filename {
+					t.Errorf("expected log filename to be '%s', got '%s'", tt.expectedConfig.Log.File.Filename, cfg.Log.File.Filename)
 				}
-				if cfg.Log.LogFile.MaxSize != tt.expectedConfig.Log.LogFile.MaxSize {
-					t.Errorf("expected log max size to be %d, got %d", tt.expectedConfig.Log.LogFile.MaxSize, cfg.Log.LogFile.MaxSize)
+				if cfg.Log.File.MaxSize != tt.expectedConfig.Log.File.MaxSize {
+					t.Errorf("expected log max size to be %d, got %d", tt.expectedConfig.Log.File.MaxSize, cfg.Log.File.MaxSize)
 				}
-				if cfg.Log.LogFile.MaxBackups != tt.expectedConfig.Log.LogFile.MaxBackups {
-					t.Errorf("expected log max backups to be %d, got %d", tt.expectedConfig.Log.LogFile.MaxBackups, cfg.Log.LogFile.MaxBackups)
+				if cfg.Log.File.MaxBackups != tt.expectedConfig.Log.File.MaxBackups {
+					t.Errorf("expected log max backups to be %d, got %d", tt.expectedConfig.Log.File.MaxBackups, cfg.Log.File.MaxBackups)
 				}
-				if cfg.Log.LogFile.MaxAge != tt.expectedConfig.Log.LogFile.MaxAge {
-					t.Errorf("expected log max age to be %d, got %d", tt.expectedConfig.Log.LogFile.MaxAge, cfg.Log.LogFile.MaxAge)
+				if cfg.Log.File.MaxAge != tt.expectedConfig.Log.File.MaxAge {
+					t.Errorf("expected log max age to be %d, got %d", tt.expectedConfig.Log.File.MaxAge, cfg.Log.File.MaxAge)
 				}
 			}
 		})

@@ -7,3 +7,14 @@ log:
     maxsize: 1 # megabytes
     maxbackups: 3 # number of backups
     maxage: 30 # days
+
+db:
+  path: "sites.db"
+
+smtp:
+   host: "localhost"
+   port: 25
+   username: "billb"
+   password: "your_password"
+   from: "billb@localhost"
+   to: "billb@localhost"

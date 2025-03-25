@@ -2,81 +2,221 @@ package site
 
 import (
 	"encoding/csv"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"net"
 	"os"
 	"strconv"
+	"time"
+
+	"github.com/sirupsen/logrus"
+	"go.etcd.io/bbolt"
 )
 
-// Site represents a site with its details.
 type Site struct {
-	Hostname   string `csv:"hostname"`
-	Port       int    `csv:"port"`
-	EntityName string `csv:"entity_name"`
-	IP         string `csv:"ip"`
+	Hostname   string
+	Port       int
+	EntityName string
+	IP         string
+	OldIP      string
+	NewIP      string
+	Changed    bool
+	ChangeTime time.Time
 }
 
-// Sites is a slice of Site.
 type Sites []Site
 
-// WriteToFile writes the sites to a CSV file.
-func (s *Sites) WriteToFile(filename string) error {
-	file, err := os.Create(filename)
+func (s *Sites) ReadFromCSV(filePath string) error {
+	file, err := os.Open(filePath)
 	if err != nil {
-		return fmt.Errorf("failed to create file: %w", err)
+		return fmt.Errorf("failed to open csv file: %w", err)
 	}
-	defer func(file *os.File) {
-		_ = file.Close()
-	}(file)
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	records, err := reader.ReadAll()
+	if err != nil {
+		return fmt.Errorf("failed to read from csv file: %w", err)
+	}
+
+	// Skip the header row
+	for _, record := range records[1:] {
+		port, err := strconv.Atoi(record[1])
+		if err != nil {
+			return fmt.Errorf("invalid port value: %w", err)
+		}
+		*s = append(*s, Site{Hostname: record[0], Port: port, EntityName: record[2], IP: record[3]})
+	}
+
+	return nil
+}
+
+func (s *Sites) WriteToCSV(filePath string) error {
+	file, err := os.Create(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to write to csv: %w", err)
+	}
+	defer file.Close()
 
 	writer := csv.NewWriter(file)
 	defer writer.Flush()
 
-	header := []string{"Hostname", "Port", "EntityName", "IP"}
-	if err := writer.Write(header); err != nil {
-		return fmt.Errorf("failed to write header: %w", err)
+	// Write the header row
+	err = writer.Write([]string{"Hostname", "Port", "EntityName", "IP", "OldIP", "NewIP", "ChangeTime"})
+	if err != nil {
+		return fmt.Errorf("failed to write csv header row: %w", err)
 	}
 
+	// Write the site records
 	for _, site := range *s {
-		record := []string{site.Hostname, strconv.Itoa(site.Port), site.EntityName, site.IP}
-		if err := writer.Write(record); err != nil {
-			return fmt.Errorf("failed to write record: %w", err)
+		err = writer.Write([]string{site.Hostname, strconv.Itoa(site.Port), site.EntityName, site.IP, "", "", ""})
+		if err != nil {
+			return fmt.Errorf("failed to write csv site records: %w", err)
 		}
 	}
 
 	return nil
 }
 
-// ReadFromFile reads the sites from a CSV file and populates the Sites slice.
-func (s *Sites) ReadFromFile(filename string) error {
-	file, err := os.Open(filename)
-	if err != nil {
-		return fmt.Errorf("failed to open file: %w", err)
-	}
-	defer func(file *os.File) {
-		_ = file.Close()
-	}(file)
+func (s *Sites) ReadFromDB(db *bbolt.DB) error {
+	return db.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("sites"))
+		if b == nil {
+			return errors.New("bucket not found")
+		}
 
-	reader := csv.NewReader(file)
-	records, err := reader.ReadAll()
+		return b.ForEach(func(k, v []byte) error {
+			var site Site
+			err := json.Unmarshal(v, &site)
+			if err != nil {
+				logrus.Errorf("Failed to unmarshal site data for key %s: %v", k, err)
+				return nil // Skip invalid entries
+			}
 
-	if err != nil {
-		return fmt.Errorf("failed to read records: %w", err)
-	}
+			*s = append(*s, site)
+			return nil
+		})
+	})
+}
 
-	for _, record := range records[1:] { // Skip header row
-		port, err := strconv.Atoi(record[1])
+func (s *Sites) WriteToDB(db *bbolt.DB) error {
+	return db.Update(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("sites"))
+		if b == nil {
+			return errors.New("bucket not found")
+		}
+
+		for _, site := range *s {
+			data, err := json.Marshal(site)
+			if err != nil {
+				return fmt.Errorf("failed to marshal site json: %w", err)
+			}
+
+			err = b.Put([]byte(site.Hostname), data)
+			if err != nil {
+				return fmt.Errorf("failed to put site.Name: %w", err)
+			}
+		}
+
+		return nil
+	})
+}
+
+func (s *Sites) UpdateIPs(db *bbolt.DB) error {
+	for i, site := range *s {
+		ips, err := net.LookupIP(site.Hostname)
 		if err != nil {
-			return fmt.Errorf("failed to parse port: %w", err)
+			logrus.Errorf("Failed to lookup IP for %s: %v", site.Hostname, err)
+			continue
 		}
 
-		site := Site{
-			Hostname:   record[0],
-			Port:       port,
-			EntityName: record[2],
-			IP:         record[3],
+		ipChanged := true
+		for _, ip := range ips {
+			if ip.String() == site.IP {
+				ipChanged = false
+				break
+			}
 		}
-		*s = append(*s, site)
+
+		if ipChanged && len(ips) > 0 {
+			(*s)[i].OldIP = site.IP
+			(*s)[i].NewIP = ips[0].String()
+			(*s)[i].IP = ips[0].String()
+			(*s)[i].Changed = true
+			logrus.Infof("IP address for %s changed from %s to %s", site.Hostname, (*s)[i].OldIP, (*s)[i].NewIP)
+
+			// Persist the change in the database
+			err = db.Update(func(tx *bbolt.Tx) error {
+				b := tx.Bucket([]byte("sites"))
+				if b == nil {
+					return errors.New("bucket not found")
+				}
+
+				data, err := json.Marshal((*s)[i])
+				if err != nil {
+					return fmt.Errorf("failed to marshal json: %w", err)
+				}
+
+				err = b.Put([]byte(site.Hostname), data)
+				if err != nil {
+					return fmt.Errorf("failed to put site.Name: %w", err)
+				}
+
+				// Store the change in the changes bucket
+				cb := tx.Bucket([]byte("changes"))
+				if cb == nil {
+					cb, err = tx.CreateBucket([]byte("changes"))
+					if err != nil {
+						return fmt.Errorf("failed to store changes in db: %w", err)
+					}
+				}
+
+				changeKey := fmt.Sprintf("%s-%s", site.Hostname, time.Now().Format(time.RFC3339))
+				return cb.Put([]byte(changeKey), data)
+			})
+			if err != nil {
+				logrus.Errorf("Failed to persist change for %s: %v", site.Hostname, err)
+			}
+		}
 	}
 
 	return nil
+}
+
+func (s *Sites) ReportChanges(db *bbolt.DB) error {
+	return db.View(func(tx *bbolt.Tx) error {
+		cb := tx.Bucket([]byte("changes"))
+		if cb == nil {
+			return errors.New("changes bucket not found")
+		}
+
+		return cb.ForEach(func(k, v []byte) error {
+			var site Site
+			err := json.Unmarshal(v, &site)
+			if err != nil {
+				logrus.Errorf("Failed to unmarshal site data for key %s: %v", k, err)
+				return nil // Skip invalid entries
+			}
+
+			fmt.Printf("Site: %s, Old IP: %s, New IP: %s, Timestamp: %s\n", site.Hostname, site.OldIP, site.NewIP, k)
+			return nil
+		})
+	})
+}
+
+func (s *Sites) CountRecords(db *bbolt.DB) (int, error) {
+	count := 0
+	err := db.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("changes"))
+		if b == nil {
+			return errors.New("bucket not found")
+		}
+		return b.ForEach(func(k, v []byte) error {
+			count++
+			return nil
+		})
+	})
+
+	return count, err
 }

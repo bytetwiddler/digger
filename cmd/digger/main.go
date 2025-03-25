@@ -1,154 +1,113 @@
-// main.go
 package main
 
 import (
-	"errors"
 	"flag"
 	"fmt"
-	"net"
-	"os"
+	"log"
 
 	"github.com/bytetwiddler/digger/pkg/config"
 	"github.com/bytetwiddler/digger/pkg/logging"
 	"github.com/bytetwiddler/digger/pkg/site"
-	"github.com/gofrs/flock"
 	"github.com/sirupsen/logrus"
+	"go.etcd.io/bbolt"
 )
-
-var (
-	version string // These are set by the linker
-	build   string //nolint:gochecknoglobals // These are set by the linker
-	date    string //nolint:gochecknoglobals // These are set by the linker
-	verbose bool   //nolint:gochecknoglobals // Set by the verbose flag
-)
-
-// ErrNoIPsFound custom error for no IP addresses found
-var ErrNoIPsFound = errors.New("no IP addresses found for the domain")
-
-// dig performs a DNS lookup on the hostnames in the sites slice and updates the IP field if the IP has changed.
-func dig(sites *site.Sites) (bool, error) {
-	changed := false
-
-	for i := range *sites {
-		ip, err := net.LookupIP((*sites)[i].Hostname)
-		if err != nil {
-			logrus.WithError(err).Errorf("Error resolving host %s", (*sites)[i].Hostname)
-			_, _ = fmt.Fprintf(os.Stderr, "Error resolving host %s: %v\n", (*sites)[i].Hostname, err)
-			continue
-		}
-
-		numberOfIPs := len(ip)
-		if numberOfIPs == 0 {
-			logrus.Errorf("No IP addresses found for %s", (*sites)[i].Hostname)
-			_, _ = fmt.Fprintf(os.Stderr, "No IP addresses found for %s\n", (*sites)[i].Hostname)
-			return false, ErrNoIPsFound
-		}
-
-		matchFound := false
-		for _, addr := range ip {
-			if (*sites)[i].IP == addr.String() {
-				matchFound = true
-				break
-			}
-		}
-
-		if numberOfIPs > 1 {
-			logrus.WithFields(logrus.Fields{
-				"hostname":      (*sites)[i].Hostname,
-				"number_of_ips": numberOfIPs,
-				"match_found":   matchFound,
-			}).Info("Multiple IP addresses found")
-		}
-
-		if !matchFound {
-			logrus.WithFields(logrus.Fields{
-				"hostname": (*sites)[i].Hostname,
-				"old_ip":   (*sites)[i].IP,
-				"new_ip":   ip[0].String(),
-			}).Info("IP has changed")
-
-			if verbose {
-				_, _ = fmt.Fprintf(os.Stderr, "IP has changed for %s: %s -> %s\n", (*sites)[i].Hostname, (*sites)[i].IP, ip[0].String())
-			}
-
-			(*sites)[i].IP = ip[0].String()
-			changed = true
-		} else {
-			logrus.WithFields(logrus.Fields{
-				"hostname":      (*sites)[i].Hostname,
-				"number_of_ips": numberOfIPs,
-				"ip":            (*sites)[i].IP,
-			}).Info("IP has not changed")
-
-			if verbose {
-				_, _ = fmt.Fprintf(os.Stdout, "IP has not changed for %s: %s\n", (*sites)[i].Hostname, (*sites)[i].IP)
-			}
-		}
-	}
-
-	return changed, nil
-}
-
-func run() error {
-	// Read configuration
-	cfg, err := config.LoadConfig()
-	if err != nil {
-		return fmt.Errorf("error opening config file: %w", err)
-	}
-
-	// Setup logging
-	logChannel, err := logging.SetupLogging(cfg)
-	if err != nil {
-		return fmt.Errorf("error setting up logging: %w", err)
-	}
-	defer close(logChannel)
-
-	// Lock the sites.csv file
-	fileLock := flock.New("sites.csv.lock")
-	locked, err := fileLock.TryLock()
-	if err != nil {
-		return fmt.Errorf("error locking sites file: %w", err)
-	}
-	if !locked {
-		return fmt.Errorf("could not acquire lock on sites file")
-	}
-	defer func() {
-		if err := fileLock.Unlock(); err != nil {
-			logrus.Errorf("error unlocking sites file: %v", err)
-		}
-	}()
-
-	sites := site.Sites{}
-
-	if err := sites.ReadFromFile("sites.csv"); err != nil {
-		return fmt.Errorf("error reading sites file: %w", err)
-	}
-
-	changed, err := dig(&sites)
-	if err != nil {
-		return fmt.Errorf("error resolving IP addresses: %w", err)
-	}
-
-	if changed {
-		if err := sites.WriteToFile("sites.csv"); err != nil {
-			return fmt.Errorf("error writing sites file: %w", err)
-		}
-	}
-
-	return nil
-}
 
 func main() {
-	versionFlag := flag.Bool("version", false, "Print the version and exit")
-	flag.BoolVar(&verbose, "verbose", false, "Enable verbose output")
+	// Define the report and update flags
+	report := flag.Bool("report", false, "Report changes from the database")
+	update := flag.Bool("update", false, "Update IP addresses in the CSV file")
 	flag.Parse()
 
-	if *versionFlag {
-		_, _ = fmt.Fprintf(os.Stderr, "Version: %s, Build: %s, Date: %s\n", version, build, date)
+	// Load configuration
+	cfg, err := config.LoadConfig("config.yaml")
+	if err != nil {
+		log.Fatalf("failed to load config: %v", err)
+	}
+
+	// Set up logging
+	file, err := logging.SetupLogging(cfg)
+	if err != nil {
+		log.Fatalf("failed to set up logging: %v", err)
+	}
+	defer file.Close()
+
+	// Open the bbolt database
+	db, err := bbolt.Open(cfg.DB.Path, 0o600, nil)
+
+	if err != nil {
+		logrus.Fatal(err)
+	}
+
+	defer db.Close()
+
+	logrus.Info("digger operation started")
+
+	// Ensure the buckets are created before reading from them
+	err = db.Update(func(tx *bbolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists([]byte("sites"))
+
+		if err != nil {
+			return fmt.Errorf("failed creating db sites: %w", err)
+		}
+
+		_, err = tx.CreateBucketIfNotExists([]byte("changes"))
+		if err != nil {
+			return fmt.Errorf("failed creating db changes: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		logrus.Fatalf("failed to create buckets: %v", err)
+	}
+
+	var sites site.Sites
+
+	// Read sites from CSV
+	err = sites.ReadFromCSV("sites.csv")
+	if err != nil {
+		logrus.Fatalf("failed to read from csv: %v", err)
+	}
+
+	// If the report flag is set, report changes and exit
+	if *report {
+		count, err := sites.CountRecords(db)
+
+		if err != nil {
+			logrus.Fatalf("failed to count records: %v", err)
+		}
+		logrus.Infof("Total number of records: %d", count)
+
+		err = sites.ReportChanges(db)
+		if err != nil {
+			logrus.Fatalf("failed to report changes: %v", err)
+		}
+
+		logrus.Info("Report completed successfully")
+
 		return
 	}
 
-	if err := run(); err != nil {
-		logrus.Fatalf("Error: %v", err)
+	// Update IPs and log changes
+	err = sites.UpdateIPs(db)
+	if err != nil {
+		logrus.Fatalf("failed to update IPs: %v", err)
 	}
+
+	// Write sites to the database
+	err = sites.WriteToDB(db)
+	if err != nil {
+		logrus.Fatalf("failed to write to db: %v", err)
+	}
+
+	// If the update flag is set, update the CSV file with the new IPs
+	if *update {
+		err = sites.WriteToCSV("sites.csv")
+		if err != nil {
+			logrus.Fatalf("failed to write to csv: %v", err)
+		}
+
+		logrus.Info("CSV file updated successfully")
+	}
+
+	logrus.Info("digger operation completed successfully")
 }
