@@ -2,12 +2,14 @@ package main
 
 import (
 	"flag"
+	"fmt"
+	"log"
+
 	"github.com/bytetwiddler/digger/pkg/config"
 	"github.com/bytetwiddler/digger/pkg/logging"
 	"github.com/bytetwiddler/digger/pkg/site"
 	"github.com/sirupsen/logrus"
 	"go.etcd.io/bbolt"
-	"log"
 )
 
 func main() {
@@ -30,20 +32,29 @@ func main() {
 	defer file.Close()
 
 	// Open the bbolt database
-	db, err := bbolt.Open(cfg.DB.Path, 0600, nil)
+	db, err := bbolt.Open(cfg.DB.Path, 0o600, nil)
+
 	if err != nil {
 		logrus.Fatal(err)
 	}
+
 	defer db.Close()
+
+	logrus.Info("digger operation started")
 
 	// Ensure the buckets are created before reading from them
 	err = db.Update(func(tx *bbolt.Tx) error {
 		_, err := tx.CreateBucketIfNotExists([]byte("sites"))
+
 		if err != nil {
-			return err
+			return fmt.Errorf("failed creating db sites: %w", err)
 		}
+
 		_, err = tx.CreateBucketIfNotExists([]byte("changes"))
-		return err
+		if err != nil {
+			return fmt.Errorf("failed creating db changes: %w", err)
+		}
+		return nil
 	})
 	if err != nil {
 		logrus.Fatalf("failed to create buckets: %v", err)
@@ -59,16 +70,20 @@ func main() {
 
 	// If the report flag is set, report changes and exit
 	if *report {
-		err = sites.ReportChanges(db)
-		if err != nil {
-			logrus.Fatalf("failed to report changes: %v", err)
-		}
 		count, err := sites.CountRecords(db)
+
 		if err != nil {
 			logrus.Fatalf("failed to count records: %v", err)
 		}
 		logrus.Infof("Total number of records: %d", count)
+
+		err = sites.ReportChanges(db)
+		if err != nil {
+			logrus.Fatalf("failed to report changes: %v", err)
+		}
+
 		logrus.Info("Report completed successfully")
+
 		return
 	}
 
@@ -90,8 +105,9 @@ func main() {
 		if err != nil {
 			logrus.Fatalf("failed to write to csv: %v", err)
 		}
+
 		logrus.Info("CSV file updated successfully")
 	}
 
-	logrus.Info("Operation completed successfully")
+	logrus.Info("digger operation completed successfully")
 }

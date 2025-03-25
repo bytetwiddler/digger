@@ -1,6 +1,7 @@
 package logging
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/Graylog2/go-gelf/gelf"
@@ -19,23 +20,30 @@ func (hook *GelfHook) Levels() []logrus.Level {
 func (hook *GelfHook) Fire(entry *logrus.Entry) error {
 	msg, err := entry.String()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to setup GELF hook: %w", err)
 	}
-	return hook.Writer.WriteMessage(&gelf.Message{
+
+	writeErr := hook.Writer.WriteMessage(&gelf.Message{
 		Version:  "1.1",
 		Host:     "localhost",
 		Short:    entry.Message,
 		Full:     msg,
-		TimeUnix: float64(entry.Time.UnixNano()) / 1e9,
-		Level:    int32(entry.Level),
+		TimeUnix: float64(entry.Time.UnixNano()) / 1e9, //nolint:mnd // magic is fine here
+		Level:    int32(entry.Level),                   //nolint:gosec // This is const log level, not a user input
 	})
+
+	if writeErr != nil {
+		return fmt.Errorf("failed to setup GELF: %w", writeErr)
+	}
+
+	return nil
 }
 
 func SetupLogging(cfg *config.Config) (*os.File, error) {
 	// Set up logging to a file
-	file, err := os.OpenFile(cfg.Log.File.Filename, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	file, err := os.OpenFile(cfg.Log.File.Filename, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666) //nolint:mnd // magic is fine here
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to open log file: %w", err)
 	}
 
 	logrus.SetOutput(file)
@@ -44,15 +52,18 @@ func SetupLogging(cfg *config.Config) (*os.File, error) {
 	// Set log level
 	level, err := logrus.ParseLevel(cfg.Log.Level)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to set log level: %w", err)
 	}
+
 	logrus.SetLevel(level)
 
 	// Set up logging to a GELF server
 	gelfWriter, err := gelf.NewWriter(cfg.Log.Gelf.Address)
+
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to setup GELF server: %w", err)
 	}
+
 	logrus.AddHook(&GelfHook{Writer: gelfWriter})
 
 	return file, nil
