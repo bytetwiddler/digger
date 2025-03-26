@@ -88,7 +88,7 @@ func main() {
 	}
 
 	// Update IPs and log changes
-	err = sites.UpdateIPs(db)
+	err = sites.UpdateIPs(cfg, db)
 	if err != nil {
 		logrus.Fatalf("failed to update IPs: %v", err)
 	}

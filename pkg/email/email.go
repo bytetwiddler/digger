@@ -8,10 +8,18 @@ import (
 )
 
 func SendEmail(cfg *config.Config, subject, body string) error {
-	auth := smtp.PlainAuth("", cfg.SMTP.Username, cfg.SMTP.Password, cfg.SMTP.Host)
+	var auth smtp.Auth
+	if cfg.SMTP.Username != "" && cfg.SMTP.Password != "" {
+		auth = smtp.PlainAuth("", cfg.SMTP.Username, cfg.SMTP.Password, cfg.SMTP.Host)
+	}
+
 	to := []string{cfg.SMTP.To}
 	msg := []byte(fmt.Sprintf("To: %s\r\nSubject: %s\r\n\r\n%s", cfg.SMTP.To, subject, body))
 	addr := fmt.Sprintf("%s:%d", cfg.SMTP.Host, cfg.SMTP.Port)
 
-	return fmt.Errorf("failed to send email: %w", smtp.SendMail(addr, auth, cfg.SMTP.From, to, msg))
+	err := smtp.SendMail(addr, auth, cfg.SMTP.From, to, msg)
+	if err != nil {
+		return fmt.Errorf("failed to send email: %w", err)
+	}
+	return nil
 }
