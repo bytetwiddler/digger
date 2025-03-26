@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/bytetwiddler/digger/pkg/config"
+	"github.com/bytetwiddler/digger/pkg/email"
 	"github.com/sirupsen/logrus"
 	"go.etcd.io/bbolt"
 )
@@ -123,18 +125,21 @@ func (s *Sites) WriteToDB(db *bbolt.DB) error {
 	})
 }
 
-func (s *Sites) UpdateIPs(db *bbolt.DB) error {
+func (s *Sites) UpdateIPs(cfg *config.Config, db *bbolt.DB) error {
 	for i, site := range *s {
 		ips, err := net.LookupIP(site.Hostname)
 		if err != nil {
 			logrus.Errorf("Failed to lookup IP for %s: %v", site.Hostname, err)
+
 			continue
 		}
 
 		ipChanged := true
+
 		for _, ip := range ips {
 			if ip.String() == site.IP {
 				ipChanged = false
+
 				break
 			}
 		}
@@ -144,7 +149,16 @@ func (s *Sites) UpdateIPs(db *bbolt.DB) error {
 			(*s)[i].NewIP = ips[0].String()
 			(*s)[i].IP = ips[0].String()
 			(*s)[i].Changed = true
-			logrus.Infof("IP address for %s changed from %s to %s", site.Hostname, (*s)[i].OldIP, (*s)[i].NewIP)
+			msg := fmt.Sprintf("IP address for %s changed from %s to %s", site.Hostname, (*s)[i].OldIP, (*s)[i].NewIP)
+			logrus.Infof(msg)
+
+			// Send an email notification
+			logrus.Infof("Sending email notification to %s", cfg.SMTP.To)
+			err = email.SendEmail(cfg, "IP Address Change", msg)
+
+			if err != nil {
+				logrus.Errorf("Failed to send email notification: %v", err)
+			}
 
 			// Persist the change in the database
 			err = db.Update(func(tx *bbolt.Tx) error {
@@ -173,6 +187,7 @@ func (s *Sites) UpdateIPs(db *bbolt.DB) error {
 				}
 
 				changeKey := fmt.Sprintf("%s-%s", site.Hostname, time.Now().Format(time.RFC3339))
+
 				return cb.Put([]byte(changeKey), data)
 			})
 			if err != nil {
@@ -194,12 +209,14 @@ func (s *Sites) ReportChanges(db *bbolt.DB) error {
 		return cb.ForEach(func(k, v []byte) error {
 			var site Site
 			err := json.Unmarshal(v, &site)
+
 			if err != nil {
 				logrus.Errorf("Failed to unmarshal site data for key %s: %v", k, err)
 				return nil // Skip invalid entries
 			}
 
 			fmt.Printf("Site: %s, Old IP: %s, New IP: %s, Timestamp: %s\n", site.Hostname, site.OldIP, site.NewIP, k)
+
 			return nil
 		})
 	})
@@ -212,6 +229,7 @@ func (s *Sites) CountRecords(db *bbolt.DB) (int, error) {
 		if b == nil {
 			return errors.New("bucket not found")
 		}
+
 		return b.ForEach(func(k, v []byte) error {
 			count++
 			return nil
