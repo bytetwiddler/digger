@@ -1,13 +1,10 @@
-.PHONY: all build test clean run build-windows build-linux build-darwin build-all
+.PHONY: all build test clean run build-windows build-linux build-darwin build-all build-service-manager
 
 VERSION := $(shell git describe --tags --always --dirty)
 BUILD := $(shell git rev-parse --short HEAD)
-DATE := $(shell date +%Y-%m-%d)
+DATE := $(shell powershell -Command "Get-Date -Format yyyy-MM-dd")
 LDARGS := -X main.version=$(VERSION) -X main.build=$(BUILD) -X main.date=$(DATE)
 OUTPUT_DIR := build
-
-# Create the output directory if it doesn't exist
-$(shell mkdir -p $(OUTPUT_DIR))
 
 all: build
 
@@ -15,21 +12,24 @@ build:
 	go build -ldflags "$(LDARGS)" -o digger -v ./cmd/digger
 
 build-windows:
-	GOOS=windows GOARCH=amd64 go build -ldflags "$(LDARGS)" -o $(OUTPUT_DIR)/digger-windows-amd64.exe -v ./cmd/digger
+	if not exist $(OUTPUT_DIR) mkdir $(OUTPUT_DIR)
+	go build -o $(OUTPUT_DIR)\digger-windows-amd64.exe -v .\cmd\digger
+	copy /Y config.yaml $(OUTPUT_DIR)
 
-build-linux:
-	GOOS=linux GOARCH=amd64 go build -ldflags "$(LDARGS)" -o $(OUTPUT_DIR)/digger-linux-amd64 -v ./cmd/digger
+build-service-manager:
+	if not exist $(OUTPUT_DIR) mkdir $(OUTPUT_DIR)
+	go build -ldflags "$(LDARGS)" -o $(OUTPUT_DIR)\service_manager.exe -v .\cmd\service_manager
+	copy /Y config.yaml $(OUTPUT_DIR)
 
-build-darwin:
-	GOOS=darwin GOARCH=arm64 go build -ldflags "$(LDARGS)" -o $(OUTPUT_DIR)/digger-darwin-arm64 -v ./cmd/digger
-
-build-all: build-windows build-linux build-darwin
+build-all: build-windows build-service-manager
 
 test:
 	go test -v ./... -cover
 
 clean:
-	rm -f digger $(OUTPUT_DIR)/digger-windows-amd64.exe $(OUTPUT_DIR)/digger-linux-amd64 $(OUTPUT_DIR)/digger-darwin-arm64 digger.log
+	if exist $(OUTPUT_DIR) rd /s /q $(OUTPUT_DIR)
+	if exist digger.exe del /q digger.exe
+	if exist digger.log del /q digger.log
 
 run: build
-	./digger
+	.\digger.exe
