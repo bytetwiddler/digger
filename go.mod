@@ -4,6 +4,7 @@ go 1.23.6
 
 require (
 	github.com/Graylog2/go-gelf v0.0.0-20170811154226-7ebf4f536d8f
+	github.com/gophish/gomail v0.0.0-20200818021916-1f6d0dfd512e
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/viper v1.20.1
 	github.com/stretchr/testify v1.10.0
@@ -28,6 +29,7 @@ require (
 	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/multierr v1.9.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
+	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
