@@ -30,6 +30,7 @@ type Config struct {
 		From     string `yaml:"from"`
 		To       string `yaml:"to"`
 	} `yaml:"smtp"`
+	DiggerPath string `yaml:"digger_path"`
 }
 
 func LoadConfig(filePath string) (*Config, error) {

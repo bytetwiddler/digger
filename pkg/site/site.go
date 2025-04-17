@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/bytetwiddler/digger/pkg/config"
-	"github.com/bytetwiddler/digger/pkg/email"
+	"github.com/bytetwiddler/digger/pkg/notification"
 	"github.com/sirupsen/logrus"
 	"go.etcd.io/bbolt"
 )
@@ -130,16 +130,13 @@ func (s *Sites) UpdateIPs(cfg *config.Config, db *bbolt.DB) error {
 		ips, err := net.LookupIP(site.Hostname)
 		if err != nil {
 			logrus.Errorf("Failed to lookup IP for %s: %v", site.Hostname, err)
-
 			continue
 		}
 
 		ipChanged := true
-
 		for _, ip := range ips {
 			if ip.String() == site.IP {
 				ipChanged = false
-
 				break
 			}
 		}
@@ -154,8 +151,7 @@ func (s *Sites) UpdateIPs(cfg *config.Config, db *bbolt.DB) error {
 
 			// Send an email notification
 			logrus.Infof("Sending email notification to %s", cfg.SMTP.To)
-			err = email.SendEmail(cfg, "IP Address Change", msg)
-
+			err = notification.SendIPChangeNotification(cfg, site.Hostname, site.Port, site.EntityName, (*s)[i].OldIP, (*s)[i].NewIP)
 			if err != nil {
 				logrus.Errorf("Failed to send email notification: %v", err)
 			}
@@ -187,7 +183,6 @@ func (s *Sites) UpdateIPs(cfg *config.Config, db *bbolt.DB) error {
 				}
 
 				changeKey := fmt.Sprintf("%s-%s", site.Hostname, time.Now().Format(time.RFC3339))
-
 				return cb.Put([]byte(changeKey), data)
 			})
 			if err != nil {
@@ -209,14 +204,12 @@ func (s *Sites) ReportChanges(db *bbolt.DB) error {
 		return cb.ForEach(func(k, v []byte) error {
 			var site Site
 			err := json.Unmarshal(v, &site)
-
 			if err != nil {
 				logrus.Errorf("Failed to unmarshal site data for key %s: %v", k, err)
 				return nil // Skip invalid entries
 			}
 
 			fmt.Printf("Site: %s, Old IP: %s, New IP: %s, Timestamp: %s\n", site.Hostname, site.OldIP, site.NewIP, k)
-
 			return nil
 		})
 	})
