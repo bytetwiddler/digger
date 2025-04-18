@@ -54,3 +54,9 @@ clean:
 
 run: build-windows
 	.\$(OUTPUT_DIR)\digger-windows-amd64.exe
+
+zip: clean build-windows
+	@echo Zipping build artifacts...
+	@if exist "$(OUTPUT_DIR)\digger-windows-amd64.zip" del /F /Q "$(OUTPUT_DIR)\digger-windows-amd64.zip"
+	powershell -Command "Compress-Archive -Path $(OUTPUT_DIR)\* -DestinationPath $(OUTPUT_DIR)\digger-windows-amd64.zip"
+	@echo Zip completed.
