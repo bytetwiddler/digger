@@ -116,4 +116,4 @@ Because I'm not very imaginative and use dig all the time for DNS related chores
 This project is licensed under the MIT License - Use at your own peril
 
 ## Acknowledgements
-* We stand on the shoulders of giants, read the go.mod for a list of those giants
+We stand on the shoulders of giants, read the go.mod for a list of those giants
