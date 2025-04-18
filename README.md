@@ -61,7 +61,7 @@ email to a configurable email address with the notification and details of what 
 This should immediately start the digger service, then it should run again every 4 hours.
 
 ### Executing the digger service program outside of the service
-There are occasions such as the set above when you will want to run the service outside of the windows service intervals.  
+There are occasions when you will want to run the digger outside of the windows service intervals.  
 You can do that one of 2 ways.  
   1) Stop/Start the service
   2) Run the digger service from powershell
