@@ -87,10 +87,6 @@ You can do that one of 2 ways.
      Note: for the most part digger does not output to stdout or stderr.  It write to digger.log as configured in the config.yaml.  It also writes windows events.
      The one exception to this is when the '-report' flag is used. It will write that output to stdout.
      
-* Step-by-step bullets
-```
-code blocks for commands
-```
 
 ## The Future
 
