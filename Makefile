@@ -18,25 +18,13 @@ build-windows: copy
 	go build -o $(OUTPUT_DIR)\digger-windows-amd64.exe -v .\cmd\digger
 	go build -ldflags "$(LDARGS)" -o $(OUTPUT_DIR)\service_manager.exe -v .\cmd\service_manager
 
-build-linux: copy
-	if not exist $(OUTPUT_DIR) mkdir $(OUTPUT_DIR)
-	set GOOS=linux& set GOARCH=amd64& go build -o $(OUTPUT_DIR)/digger-linux-amd64 -v ./cmd/digger
-
-build-darwin: copy
-	if not exist $(OUTPUT_DIR) mkdir $(OUTPUT_DIR)
-	set GOOS=darwin& set GOARCH=amd64& go build -o $(OUTPUT_DIR)/digger-darwin-amd64 -v ./cmd/digger
-
-build-darwin-arm64: copy
-	if not exist $(OUTPUT_DIR) mkdir $(OUTPUT_DIR)
-	set GOOS=darwin& set GOARCH=arm64& go build -o $(OUTPUT_DIR)/digger-darwin-arm64 -v ./cmd/digger
-
 copy:
 	if not exist $(OUTPUT_DIR) mkdir $(OUTPUT_DIR)
 	copy /Y config.yaml $(OUTPUT_DIR)
 	copy /Y sites.csv $(OUTPUT_DIR)
 
 # build-all now only includes platform-specific binaries
-build-all: build-windows build-linux build-darwin build-darwin-arm64
+build-all: build-windows
 
 test:
 	go test -v ./... -cover
