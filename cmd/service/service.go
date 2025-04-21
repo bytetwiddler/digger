@@ -143,6 +143,7 @@ func runDiggerTask(elog *eventlog.Log) error {
 	cmd.Dir = exeDir
 
 	if output, err := cmd.CombinedOutput(); err != nil {
+
 		msg := fmt.Sprintf("digger execution failed: %v, output: %s", err, string(output))
 		elog.Error(1, msg)
 		return fmt.Errorf(msg)
