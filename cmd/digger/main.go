@@ -33,11 +33,9 @@ func main() {
 
 	// Open the bbolt database
 	db, err := bbolt.Open(cfg.DB.Path, 0o600, nil)
-
 	if err != nil {
 		logrus.Fatal(err)
 	}
-
 	defer db.Close()
 
 	logrus.Info("digger operation started")
@@ -45,7 +43,6 @@ func main() {
 	// Ensure the buckets are created before reading from them
 	err = db.Update(func(tx *bbolt.Tx) error {
 		_, err := tx.CreateBucketIfNotExists([]byte("sites"))
-
 		if err != nil {
 			return fmt.Errorf("failed creating db sites: %w", err)
 		}
@@ -70,8 +67,13 @@ func main() {
 
 	// If the report flag is set, report changes and exit
 	if *report {
-		count, err := sites.CountRecords(db)
+		// Read from database for reporting
+		err = sites.ReadFromDB(db)
+		if err != nil {
+			logrus.Fatalf("failed to read from database: %v", err)
+		}
 
+		count, err := sites.CountRecords(db)
 		if err != nil {
 			logrus.Fatalf("failed to count records: %v", err)
 		}
@@ -83,12 +85,11 @@ func main() {
 		}
 
 		logrus.Info("Report completed successfully")
-
 		return
 	}
 
 	// Update IPs and log changes
-	err = sites.UpdateIPs(cfg, db)
+	err = sites.UpdateIPs(cfg, db, *update)
 	if err != nil {
 		logrus.Fatalf("failed to update IPs: %v", err)
 	}
