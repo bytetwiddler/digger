@@ -23,12 +23,13 @@ type Config struct {
 		Path string `yaml:"path"`
 	} `yaml:"db"`
 	SMTP struct {
-		Host     string `yaml:"host"`
-		Port     int    `yaml:"port"`
-		Username string `yaml:"username"`
-		Password string `yaml:"password"`
-		From     string `yaml:"from"`
-		To       string `yaml:"to"`
+		Host         string `yaml:"host"`
+		Port         int    `yaml:"port"`
+		Username     string `yaml:"username"`
+		Password     string `yaml:"password"`
+		From         string `yaml:"from"`
+		To           string `yaml:"to"`
+		TemplatePath string `yaml:"template_path"`
 	} `yaml:"smtp"`
 	DiggerPath string `yaml:"digger_path"`
 }

@@ -20,10 +20,12 @@ build-windows: copy
 
 copy:
 	if not exist $(OUTPUT_DIR) mkdir $(OUTPUT_DIR)
+	if not exist $(OUTPUT_DIR)\templates mkdir $(OUTPUT_DIR)\templates
 	copy /Y config.yaml $(OUTPUT_DIR)
 	copy /Y sites.csv $(OUTPUT_DIR)
+	copy /Y templates\email.html $(OUTPUT_DIR)\templates
 
-# build-all now only includes platform-specific binaries
+
 build-all: build-windows
 
 test:
