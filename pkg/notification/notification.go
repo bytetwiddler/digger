@@ -4,63 +4,12 @@ import (
 	"bytes"
 	"crypto/tls"
 	"fmt"
+	"os"
 	"text/template"
 
 	"github.com/bytetwiddler/digger/pkg/config"
 	"github.com/gophish/gomail"
 )
-
-const emailTemplate = `<!DOCTYPE html>
-<html>
-<head>
-    <title>Third Party IP Change Alert</title>
-    <style>
-        table {
-            width: 80%;
-            border-collapse: collapse;
-            margin: 20px 0;
-            font-size: 14px;
-            text-align: left;
-        }
-        table, th, td {
-            border: 1px solid #dddddd;
-        }
-        th {
-            padding: 10px;
-            text-align: center;
-        }
-        td {
-            padding: 10px;
-            text-align: center;
-        }
-        th {
-            background-color: #f2f2f2;
-        }
-    </style>
-</head>
-<body>
-    <h2>Greetings, {{.Name}}!</h2>
-    <p>DNS resolution for a 3rd party vendor file transfer site has changed.</br></br>
-                Please alter outbound rules so that the following servers can access the new IP address 
-				at the desired ports:</br></br>
-
-				<b>LCAPP172</b></br>
-				<b>LCAPP173</b></br>
-				<b>LCISBATCH01</b></br>
-				<b>LCISBATCH02</b></br>
-				<b>LCMBD01</b></br></br>
-                
-				Failure to do so before the next batch run will result in production delays.</p>
-    <table>
-        <tr><td>Contact DL</td><td>{{.Email}}</td></tr>
-        <tr><td>Site hostname</td><td>{{.Hostname}}</td></tr>
-        <tr><td>Port</td><td>{{.Port}}</td></tr>
-        <tr><td>Vendor</td><td>{{.Vendor}}</td></tr>
-        <tr><td>Old IP</td><td>{{.OldIP}}</td></tr>
-        <tr><td>New IP</td><td>{{.NewIP}}</td></tr>
-    </table>
-</body>
-</html>`
 
 type EmailData struct {
 	Name     string
@@ -73,15 +22,21 @@ type EmailData struct {
 }
 
 func SendIPChangeNotification(cfg *config.Config, hostname string, port int, entityName string, oldIP, newIP string) error {
+	// Read the template file
+	templateContent, err := os.ReadFile(cfg.SMTP.TemplatePath)
+	if err != nil {
+		return fmt.Errorf("failed to read email template file: %w", err)
+	}
+
 	// Parse the email template
-	t, err := template.New("email").Parse(emailTemplate)
+	t, err := template.New("email").Parse(string(templateContent))
 	if err != nil {
 		return fmt.Errorf("failed to parse email template: %w", err)
 	}
 
 	// Prepare dynamic data for the template
 	data := EmailData{
-		Name:     "Security Team",
+		Name:     "Network Security Team",
 		Email:    cfg.SMTP.To,
 		Hostname: hostname,
 		Port:     port,

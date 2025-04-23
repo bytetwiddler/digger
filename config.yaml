@@ -12,11 +12,12 @@ db:
   path: "sites.db"
 
 smtp:
-   host: "some.smtp.fowarder.net"
-   port: 25
-   username: ""
-   password: ""
-   from: "somebody@someplace.org"
-   to: "somebodyelse@someotherplace.org"
+  host: "some.smtp.server"
+  port: 25
+  username: ""
+  password: ""
+  from: "somebody@somewhere.com"
+  to: "somebodyelse@someplace.net"
+  template_path: "templates\\email.html"
 
 digger_path: 'C:\\Users\\someuser\\somefolder\\digger\\build\\digger-windows-amd64.exe'

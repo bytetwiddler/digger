@@ -2,6 +2,8 @@ package notification
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"testing"
 	"text/template"
 
@@ -11,6 +13,12 @@ import (
 )
 
 func TestSendIPChangeNotification(t *testing.T) {
+	// Create a temporary template file for testing
+	tmpDir := t.TempDir()
+	templatePath := filepath.Join(tmpDir, "email.html")
+	err := os.WriteFile(templatePath, []byte(`<html>{{.Name}} - {{.Email}} - {{.Hostname}} - {{.Port}} - {{.Vendor}} - {{.OldIP}} - {{.NewIP}}</html>`), 0644)
+	require.NoError(t, err)
+
 	tests := []struct {
 		name       string
 		cfg        *config.Config
@@ -25,19 +33,21 @@ func TestSendIPChangeNotification(t *testing.T) {
 			name: "successful notification",
 			cfg: &config.Config{
 				SMTP: struct {
-					Host     string `yaml:"host"`
-					Port     int    `yaml:"port"`
-					Username string `yaml:"username"`
-					Password string `yaml:"password"`
-					From     string `yaml:"from"`
-					To       string `yaml:"to"`
+					Host         string `yaml:"host"`
+					Port         int    `yaml:"port"`
+					Username     string `yaml:"username"`
+					Password     string `yaml:"password"`
+					From         string `yaml:"from"`
+					To           string `yaml:"to"`
+					TemplatePath string `yaml:"template_path"`
 				}{
-					Host:     "test.smtp.server",
-					Port:     25,
-					Username: "testuser",
-					Password: "testpass",
-					From:     "from@test.com",
-					To:       "to@test.com",
+					Host:         "test.smtp.server",
+					Port:         25,
+					Username:     "testuser",
+					Password:     "testpass",
+					From:         "from@test.com",
+					To:           "to@test.com",
+					TemplatePath: templatePath,
 				},
 			},
 			hostname:   "test.example.com",
@@ -62,6 +72,15 @@ func TestSendIPChangeNotification(t *testing.T) {
 }
 
 func TestEmailTemplateRendering(t *testing.T) {
+	// Create a temporary template file for testing
+	tmpDir := t.TempDir()
+	templatePath := filepath.Join(tmpDir, "email.html")
+	templateContent, err := os.ReadFile("../../templates/email.html") // Read the actual template
+	require.NoError(t, err)
+
+	err = os.WriteFile(templatePath, templateContent, 0644)
+	require.NoError(t, err)
+
 	// Test data
 	data := EmailData{
 		Name:     "Test Team",
@@ -73,8 +92,11 @@ func TestEmailTemplateRendering(t *testing.T) {
 		NewIP:    "192.168.1.2",
 	}
 
-	// Parse template
-	tmpl, err := template.New("email").Parse(emailTemplate)
+	// Parse template from file
+	templateContent, err = os.ReadFile(templatePath)
+	require.NoError(t, err)
+
+	tmpl, err := template.New("email").Parse(string(templateContent))
 	require.NoError(t, err)
 
 	// Render template
